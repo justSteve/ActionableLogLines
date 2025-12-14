@@ -1,0 +1,29 @@
+{
+  "name": "@allp/core",
+  "version": "0.1.0",
+  "description": "Actionable Log Lines Protocol - Interactive log viewer with source adapters",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "watch": "tsc -w",
+    "test": "node --test"
+  },
+  "keywords": [
+    "logging",
+    "interactive",
+    "vscode",
+    "webview",
+    "beads"
+  ],
+  "author": "Steve Yegge",
+  "license": "MIT",
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "@types/vscode": "^1.85.0",
+    "typescript": "^5.3.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
