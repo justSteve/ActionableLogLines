@@ -1,29 +1,50 @@
 {
-  "name": "@allp/core",
-  "version": "0.1.0",
+  "name": "allp-viewer",
+  "displayName": "ALLP Log Viewer",
   "description": "Actionable Log Lines Protocol - Interactive log viewer with source adapters",
-  "main": "dist/index.js",
-  "types": "dist/index.d.ts",
-  "scripts": {
-    "build": "tsc",
-    "watch": "tsc -w",
-    "test": "node --test"
+  "version": "0.1.0",
+  "publisher": "justSteve",
+  "engines": {
+    "vscode": "^1.85.0"
   },
-  "keywords": [
-    "logging",
-    "interactive",
-    "vscode",
-    "webview",
-    "beads"
+  "categories": [
+    "Other"
   ],
-  "author": "Steve Yegge",
-  "license": "MIT",
+  "activationEvents": [
+    "workspaceContains:.beads"
+  ],
+  "main": "./dist/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "allp.showViewer",
+        "title": "ALLP: Show Log Viewer"
+      },
+      {
+        "command": "allp.showWithMockData",
+        "title": "ALLP: Show Viewer with Mock Data"
+      }
+    ],
+    "keybindings": [
+      {
+        "command": "allp.showViewer",
+        "key": "ctrl+shift+l",
+        "mac": "cmd+shift+l"
+      }
+    ]
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "pretest": "npm run compile",
+    "test": "node --test dist/test/**/*.test.js",
+    "test:session": "pwsh ./scripts/test-session.ps1",
+    "test:session:bash": "bash ./scripts/test-session.sh"
+  },
   "devDependencies": {
     "@types/node": "^20.0.0",
     "@types/vscode": "^1.85.0",
     "typescript": "^5.3.0"
-  },
-  "engines": {
-    "node": ">=18.0.0"
   }
 }
