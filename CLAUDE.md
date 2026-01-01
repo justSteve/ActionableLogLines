@@ -43,12 +43,20 @@ First adapter implementation uses beads events:
 
 ```bash
 npm install
-npm run build
+npm run compile
 npm run watch  # Development mode
 ```
+
+## Features (bd-vnlh)
+
+- **File watching**: Automatically watches `.beads/events.log` for new events
+- **Real-time streaming**: New log lines appear instantly in the viewer
+- **Mock mode**: Test with `ALLP: Show Viewer with Mock Data` command
+- **Split-pane UI**: Response panel (top) + streaming log (bottom)
+- **Interactive commands**: Click line for details, type commands for queries
 
 ## Related
 
 - Beads repo: `c:\myStuff\_infra\beads`
 - Event taxonomy: `beads/vscode/events/EVENT_TAXONOMY.md`
-- Tracking issue: `bd-vnlh`
+- Tracking issue: `bd-vnlh` (COMPLETE)

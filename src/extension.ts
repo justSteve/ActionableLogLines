@@ -2,10 +2,15 @@
  * ALLP VS Code Extension Entry Point
  *
  * Registers commands and activates the log viewer.
+ * Watches .beads/events.log for real-time event streaming.
  */
 
 import * as vscode from 'vscode';
+import * as fs from 'fs';
+import * as path from 'path';
+import * as readline from 'readline';
 import { AllpPanel } from './renderer/panel';
+import { registerAdapter, BeadsAdapter } from './adapters';
 
 /** Mock beads log lines for testing */
 const MOCK_BEADS_LINES = [
@@ -24,12 +29,125 @@ const MOCK_BEADS_LINES = [
   '2025-01-15T15:05:10.456Z|bd.dep.add|bd-vnlh|steve|sess-def456|depends_on=bd-97ux',
 ];
 
+/** Active file watcher */
+let fileWatcher: fs.FSWatcher | null = null;
+let lastFileSize = 0;
+
+/**
+ * Watch .beads/events.log and stream new lines to the panel
+ */
+function watchEventsLog(panel: AllpPanel, workspaceRoot: string): void {
+  const eventsPath = path.join(workspaceRoot, '.beads', 'events.log');
+
+  // Stop existing watcher if any
+  if (fileWatcher) {
+    fileWatcher.close();
+    fileWatcher = null;
+  }
+
+  // Check if file exists
+  if (!fs.existsSync(eventsPath)) {
+    console.log('ALLP: .beads/events.log not found, waiting for creation...');
+    // Watch for file creation
+    const beadsDir = path.join(workspaceRoot, '.beads');
+    if (fs.existsSync(beadsDir)) {
+      fileWatcher = fs.watch(beadsDir, (eventType, filename) => {
+        if (filename === 'events.log' && eventType === 'rename') {
+          // File was created, start watching it
+          watchEventsLog(panel, workspaceRoot);
+        }
+      });
+    }
+    return;
+  }
+
+  // Get initial file size
+  const stats = fs.statSync(eventsPath);
+  lastFileSize = stats.size;
+
+  // Load existing lines
+  loadExistingLines(panel, eventsPath);
+
+  // Watch for changes
+  fileWatcher = fs.watch(eventsPath, (eventType) => {
+    if (eventType === 'change') {
+      readNewLines(panel, eventsPath);
+    }
+  });
+
+  console.log('ALLP: Watching', eventsPath);
+}
+
+/**
+ * Load existing lines from events.log
+ */
+function loadExistingLines(panel: AllpPanel, filePath: string): void {
+  const rl = readline.createInterface({
+    input: fs.createReadStream(filePath),
+    crlfDelay: Infinity,
+  });
+
+  rl.on('line', (line) => {
+    if (line.trim()) {
+      panel.addLogLine(line);
+    }
+  });
+}
+
+/**
+ * Read new lines appended to the file
+ */
+function readNewLines(panel: AllpPanel, filePath: string): void {
+  try {
+    const stats = fs.statSync(filePath);
+    if (stats.size <= lastFileSize) {
+      // File was truncated or unchanged
+      if (stats.size < lastFileSize) {
+        // File was truncated, reload
+        lastFileSize = 0;
+        loadExistingLines(panel, filePath);
+      }
+      return;
+    }
+
+    // Read only new content
+    const stream = fs.createReadStream(filePath, {
+      start: lastFileSize,
+      end: stats.size,
+    });
+
+    const rl = readline.createInterface({
+      input: stream,
+      crlfDelay: Infinity,
+    });
+
+    rl.on('line', (line) => {
+      if (line.trim()) {
+        panel.addLogLine(line);
+      }
+    });
+
+    lastFileSize = stats.size;
+  } catch (err) {
+    console.error('ALLP: Error reading new lines:', err);
+  }
+}
+
 export function activate(context: vscode.ExtensionContext) {
   console.log('ALLP extension activated');
 
-  // Command: Show log viewer
+  // Register beads adapter
+  registerAdapter(BeadsAdapter);
+
+  // Command: Show log viewer with live file watching
   const showViewerCmd = vscode.commands.registerCommand('allp.showViewer', () => {
-    AllpPanel.createOrShow(context.extensionUri);
+    const panel = AllpPanel.createOrShow(context.extensionUri);
+
+    // Start watching events.log if in a beads workspace
+    const workspaceFolders = vscode.workspace.workspaceFolders;
+    if (workspaceFolders && workspaceFolders.length > 0) {
+      watchEventsLog(panel, workspaceFolders[0].uri.fsPath);
+    }
   });
 
   // Command: Show viewer with mock data (for testing)
@@ -50,14 +168,20 @@ export function activate(context: vscode.ExtensionContext) {
 
   context.subscriptions.push(showViewerCmd, showMockCmd);
 
-  // Auto-show if .beads folder exists and configured
+  // Auto-activate if .beads folder exists
   const workspaceFolders = vscode.workspace.workspaceFolders;
   if (workspaceFolders) {
-    // Could auto-activate here based on config
-    // For now, just register the commands
+    const beadsDir = path.join(workspaceFolders[0].uri.fsPath, '.beads');
+    if (fs.existsSync(beadsDir)) {
+      console.log('ALLP: Beads workspace detected, ready to show viewer');
+    }
   }
 }
 
 export function deactivate() {
   console.log('ALLP extension deactivated');
+  if (fileWatcher) {
+    fileWatcher.close();
+    fileWatcher = null;
+  }
 }
