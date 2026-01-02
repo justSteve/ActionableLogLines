@@ -8,6 +8,8 @@ Interactive log viewer for VS Code where each log line is both **display** and a
 - **Query** with commands or natural language
 - **Beads integration** for issue tracking workflows
 - **Extensible adapter system** for custom log formats
+- **Adapter generator** - Create custom adapters with interactive CLI
+- **Standalone library** - Use ALLP without VS Code
 
 ## Quick Start
 
@@ -69,12 +71,59 @@ Example:
 | `hk` | Hook | Git hook triggers |
 | `gd` | Guard | Enforcement checks |
 
-## Custom Adapters
+## Adapter Generator
 
-Create adapters for other log formats:
+Generate custom adapters for your applications:
+
+```bash
+# Install and link CLI tool
+npm install
+npm link
+
+# Generate adapter interactively
+cd your-app
+allp-generate
+```
+
+The generator creates:
+- **adapter.ts** - ALLP SourceAdapter for your log format
+- **logger.ts** - Helper library with `logError()`, `logApiCall()`, etc.
+- **adapter.test.ts** - Test suite
+- **README.md** - Usage instructions
+
+See [Adapter Generator Guide](docs/ADAPTER-GENERATOR.md) for details.
+
+## Standalone Library
+
+Use ALLP core without VS Code:
 
 ```typescript
-import type { SourceAdapter } from 'allp-viewer';
+import { registerAdapter, getRegistry } from 'allp';
+import { MyAdapter } from './.allp/adapter';
+
+// Register adapter
+registerAdapter(MyAdapter);
+
+// Parse log lines
+const parsed = getRegistry().parse(logLine);
+if (parsed) {
+  const expansion = await parsed.getDefaultExpansion();
+  console.log(expansion.content);
+}
+```
+
+Perfect for:
+- CLI log viewers
+- Web-based log exploration
+- Custom tooling
+- Non-VS Code environments
+
+## Custom Adapters
+
+Create adapters manually or use the generator:
+
+```typescript
+import type { SourceAdapter } from 'allp';
 
 const MyAdapter: SourceAdapter = {
   type: 'my-format',
@@ -120,14 +169,24 @@ npm test
 
 ```
 src/
+  lib/                # Standalone library entry point
   protocol.ts         # Core interfaces
   interpreter.ts      # Command/NL query processing
   adapters/
     index.ts          # Adapter registry
     beads.ts          # Beads format adapter
+  generator/
+    index.ts          # Adapter generator engine
+    cli.ts            # Interactive CLI
+    templates/        # Code generation templates
   renderer/
     panel.ts          # VS Code WebView panel
 ```
+
+## Documentation
+
+- [Adapter Generator Guide](docs/ADAPTER-GENERATOR.md) - Generate custom adapters
+- [Logging Schema Reference](docs/LOGGING-SCHEMA.md) - Comprehensive logging patterns
 
 ## License
 

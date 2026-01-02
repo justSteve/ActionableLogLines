@@ -27,6 +27,13 @@
     "workspaceContains:.beads"
   ],
   "main": "./dist/extension.js",
+  "exports": {
+    ".": "./dist/lib/index.js",
+    "./extension": "./dist/extension.js"
+  },
+  "bin": {
+    "allp-generate": "./bin/allp-generate.js"
+  },
   "contributes": {
     "commands": [
       {
@@ -55,8 +62,16 @@
     "test:session": "pwsh ./scripts/test-session.ps1",
     "test:session:bash": "bash ./scripts/test-session.sh"
   },
+  "dependencies": {
+    "handlebars": "^4.7.8",
+    "prettier": "^3.0.0",
+    "prompts": "^2.4.2",
+    "uuid": "^9.0.0"
+  },
   "devDependencies": {
     "@types/node": "^20.0.0",
+    "@types/prompts": "^2.4.4",
+    "@types/uuid": "^9.0.0",
     "@types/vscode": "^1.85.0",
     "typescript": "^5.3.0"
   }
