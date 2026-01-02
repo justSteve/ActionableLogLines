@@ -6,3 +6,4 @@ dist/
 !src/**/*.js
 .vscode/
 *.log
+.claude/
