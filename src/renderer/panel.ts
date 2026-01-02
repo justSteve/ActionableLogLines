@@ -16,7 +16,7 @@ import { interpret } from '../interpreter';
  * Message types for WebView communication
  */
 interface WebViewMessage {
-  type: 'logLine' | 'expansion' | 'queryResult' | 'clear' | 'config';
+  type: 'logLine' | 'expansion' | 'queryResult' | 'clear' | 'config' | 'filterState';
   payload: unknown;
 }
 
@@ -34,10 +34,12 @@ export class AllpPanel {
   private constructor(
     panel: vscode.WebviewPanel,
     extensionUri: vscode.Uri,
+    context: vscode.ExtensionContext,
     config: RendererConfig
   ) {
     this.panel = panel;
     this.extensionUri = extensionUri;
+    this.context = context;
     this.config = config;
 
     // Set up the WebView content
@@ -54,11 +56,14 @@ export class AllpPanel {
     this.panel.onDidDispose(() => this.dispose(), null, this.disposables);
   }
 
+  private context: vscode.ExtensionContext;
+
   /**
    * Create or show the panel
    */
   public static createOrShow(
     extensionUri: vscode.Uri,
+    context: vscode.ExtensionContext,
     config: RendererConfig = DEFAULT_RENDERER_CONFIG
   ): AllpPanel {
     const column = vscode.window.activeTextEditor
@@ -83,14 +88,14 @@ export class AllpPanel {
       }
     );
 
-    AllpPanel.currentPanel = new AllpPanel(panel, extensionUri, config);
+    AllpPanel.currentPanel = new AllpPanel(panel, extensionUri, context, config);
     return AllpPanel.currentPanel;
   }
 
   /**
    * Add a log line to the viewer
    */
-  public addLogLine(rawLine: string): void {
+  public addLogLine(rawLine: string, projectName: string, projectPath: string): void {
     const registry = getRegistry();
     const parsed = registry.parse(rawLine);
 
@@ -104,6 +109,10 @@ export class AllpPanel {
           sourceType: parsed.source.type,
           sourceId: parsed.source.id,
         } : null,
+        project: {
+          name: projectName,
+          path: projectPath,
+        },
       },
     });
   }
@@ -170,8 +179,15 @@ export class AllpPanel {
         this.handleQuery(input);
         break;
       case 'ready':
-        // WebView is ready, send config
+        // WebView is ready, send config and filter state
         this.postMessage({ type: 'config', payload: this.config });
+        const savedState = this.context.workspaceState.get<Record<string, boolean>>('allp.filterState', {});
+        this.postMessage({ type: 'filterState', payload: savedState });
+        break;
+      case 'saveFilterState':
+        // Save filter state to workspace
+        const state = message.payload as Record<string, boolean>;
+        this.context.workspaceState.update('allp.filterState', state);
         break;
     }
   }
@@ -312,6 +328,98 @@ export class AllpPanel {
       text-decoration: underline;
     }
 
+    /* Filter Panel */
+    #filter-panel {
+      background: var(--bg-secondary);
+      border-bottom: 1px solid var(--border-color);
+      padding: 8px 12px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      font-size: 0.9em;
+    }
+
+    #filter-panel.collapsed {
+      display: none;
+    }
+
+    #filter-label {
+      font-weight: 500;
+      color: var(--text-primary);
+      white-space: nowrap;
+    }
+
+    #filter-controls {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    #filter-sort {
+      padding: 2px 6px;
+      background: var(--bg-primary);
+      color: var(--text-primary);
+      border: 1px solid var(--border-color);
+      border-radius: 3px;
+      font-size: 0.85em;
+      cursor: pointer;
+    }
+
+    #filter-projects {
+      flex: 1;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: center;
+    }
+
+    .project-checkbox {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      padding: 2px 8px;
+      background: var(--bg-primary);
+      border: 1px solid var(--border-color);
+      border-radius: 3px;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+
+    .project-checkbox:hover {
+      background: var(--hover-bg);
+    }
+
+    .project-checkbox input[type="checkbox"] {
+      margin: 0;
+      cursor: pointer;
+    }
+
+    .project-checkbox label {
+      cursor: pointer;
+      user-select: none;
+      font-size: 0.85em;
+    }
+
+    .project-checkbox .count {
+      color: var(--text-secondary);
+      font-size: 0.8em;
+      margin-left: 4px;
+    }
+
+    #filter-toggle {
+      padding: 2px 8px;
+      background: var(--bg-primary);
+      border: 1px solid var(--border-color);
+      border-radius: 3px;
+      cursor: pointer;
+      font-size: 0.85em;
+      white-space: nowrap;
+    }
+
+    #filter-toggle:hover {
+      background: var(--hover-bg);
+    }
+
     /* Log Panel (scrolling bottom) */
     #log-panel {
       flex: 1;
@@ -373,6 +481,18 @@ export class AllpPanel {
     </div>
   </div>
 
+  <div id="filter-panel">
+    <div id="filter-label">Projects:</div>
+    <div id="filter-controls">
+      <select id="filter-sort">
+        <option value="recent">Most Recent</option>
+        <option value="alpha">Alphabetical</option>
+      </select>
+      <button id="filter-toggle">Hide Filters</button>
+    </div>
+    <div id="filter-projects"></div>
+  </div>
+
   <div id="log-panel"></div>
 
   <script>
@@ -382,12 +502,18 @@ export class AllpPanel {
     const suggestions = document.getElementById('suggestions');
     const queryInput = document.getElementById('query-input');
     const querySubmit = document.getElementById('query-submit');
+    const filterPanel = document.getElementById('filter-panel');
+    const filterProjects = document.getElementById('filter-projects');
+    const filterSort = document.getElementById('filter-sort');
+    const filterToggle = document.getElementById('filter-toggle');
 
     let lines = [];
     let selectedIndex = -1;
     let config = {};
     let queryHistory = [];
     let historyIndex = -1;
+    let projects = new Map(); // Track projects: name -> { name, path, count, lastTimestamp }
+    let filterState = {}; // Saved filter state: projectName -> visible
 
     // Handle messages from extension
     window.addEventListener('message', event => {
@@ -407,6 +533,10 @@ export class AllpPanel {
           config = payload;
           applyConfig();
           break;
+        case 'filterState':
+          filterState = payload;
+          applyFilterState();
+          break;
         case 'clear':
           clearLog();
           break;
@@ -414,9 +544,31 @@ export class AllpPanel {
     });
 
     function addLogLine(payload) {
-      const { raw, parsed } = payload;
+      const { raw, parsed, project } = payload;
       const index = lines.length;
-      lines.push({ raw, parsed });
+      lines.push({ raw, parsed, project, visible: true });
+
+      // Track project metadata
+      let projectAdded = false;
+      if (project && project.name) {
+        const existing = projects.get(project.name);
+        const timestamp = parsed ? parsed.timestamp : new Date().toISOString();
+        if (existing) {
+          existing.count++;
+          existing.lastTimestamp = timestamp;
+        } else {
+          // Apply saved filter state if available, otherwise default to visible
+          const visible = filterState.hasOwnProperty(project.name) ? filterState[project.name] : true;
+          projects.set(project.name, {
+            name: project.name,
+            path: project.path,
+            count: 1,
+            lastTimestamp: timestamp,
+            visible: visible,
+          });
+          projectAdded = true;
+        }
+      }
 
       const el = document.createElement('div');
       el.className = 'log-line';
@@ -436,6 +588,14 @@ export class AllpPanel {
         \`;
       }
 
+      // Apply project visibility filter
+      if (project && project.name) {
+        const projectInfo = projects.get(project.name);
+        if (projectInfo && !projectInfo.visible) {
+          el.style.display = 'none';
+        }
+      }
+
       el.addEventListener('click', () => selectLine(index));
       logPanel.appendChild(el);
 
@@ -445,6 +605,11 @@ export class AllpPanel {
         if (atBottom) {
           logPanel.scrollTop = logPanel.scrollHeight;
         }
+      }
+
+      // Update filter panel if a new project was added
+      if (projectAdded) {
+        renderFilterPanel();
       }
     }
 
@@ -526,6 +691,7 @@ export class AllpPanel {
       selectedIndex = -1;
       queryHistory = [];
       historyIndex = -1;
+      projects.clear();
       logPanel.innerHTML = '';
       responseContent.innerHTML = '<span class="empty">Click a log line to see details...</span>';
       suggestions.innerHTML = '';
@@ -559,6 +725,86 @@ export class AllpPanel {
       return div.innerHTML;
     }
 
+    function renderFilterPanel() {
+      const sortBy = filterSort.value;
+      const projectList = Array.from(projects.values());
+
+      // Sort projects
+      if (sortBy === 'recent') {
+        projectList.sort((a, b) => new Date(b.lastTimestamp) - new Date(a.lastTimestamp));
+      } else {
+        projectList.sort((a, b) => a.name.localeCompare(b.name));
+      }
+
+      // Clear and rebuild
+      filterProjects.innerHTML = '';
+
+      for (const project of projectList) {
+        const container = document.createElement('div');
+        container.className = 'project-checkbox';
+
+        const checkbox = document.createElement('input');
+        checkbox.type = 'checkbox';
+        checkbox.id = 'filter-' + project.name;
+        checkbox.checked = project.visible;
+        checkbox.addEventListener('change', () => {
+          project.visible = checkbox.checked;
+          applyFilters();
+          saveFilterState();
+        });
+
+        const label = document.createElement('label');
+        label.htmlFor = checkbox.id;
+        label.textContent = project.name;
+
+        const count = document.createElement('span');
+        count.className = 'count';
+        count.textContent = '(' + project.count + ')';
+
+        container.appendChild(checkbox);
+        container.appendChild(label);
+        container.appendChild(count);
+        filterProjects.appendChild(container);
+      }
+    }
+
+    function saveFilterState() {
+      const state = {};
+      for (const [name, project] of projects.entries()) {
+        state[name] = project.visible;
+      }
+      vscode.postMessage({
+        type: 'saveFilterState',
+        payload: state
+      });
+    }
+
+    function applyFilterState() {
+      // Apply saved filter state to existing projects
+      for (const [name, project] of projects.entries()) {
+        if (filterState.hasOwnProperty(name)) {
+          project.visible = filterState[name];
+        }
+      }
+      renderFilterPanel();
+      applyFilters();
+    }
+
+    function applyFilters() {
+      // Update visibility for all log lines based on project filters
+      const logLines = logPanel.querySelectorAll('.log-line');
+      logLines.forEach((el, index) => {
+        const line = lines[index];
+        if (line && line.project) {
+          const project = projects.get(line.project.name);
+          if (project) {
+            el.style.display = project.visible ? 'flex' : 'none';
+            line.visible = project.visible;
+          }
+        }
+      });
+    }
+
     // Event listeners
     querySubmit.addEventListener('click', submitQuery);
     queryInput.addEventListener('keydown', e => {
@@ -571,6 +817,12 @@ export class AllpPanel {
         e.preventDefault();
         navigateHistory('down');
       }
+    });
+
+    filterSort.addEventListener('change', renderFilterPanel);
+    filterToggle.addEventListener('click', () => {
+      filterPanel.classList.toggle('collapsed');
+      filterToggle.textContent = filterPanel.classList.contains('collapsed') ? 'Show Filters' : 'Hide Filters';
     });
 
     // Signal ready

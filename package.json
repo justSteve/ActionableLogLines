@@ -51,7 +51,37 @@
         "key": "ctrl+shift+l",
         "mac": "cmd+shift+l"
       }
-    ]
+    ],
+    "configuration": {
+      "title": "ALLP",
+      "properties": {
+        "allp.projects": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string",
+                "description": "Display name for the project"
+              },
+              "path": {
+                "type": "string",
+                "description": "Absolute path to the project directory"
+              },
+              "logFile": {
+                "type": "string",
+                "default": ".beads/events.log",
+                "description": "Relative path to log file within project"
+              }
+            },
+            "required": ["name", "path"]
+          },
+          "default": [],
+          "description": "List of C:\\myStuff projects to watch for logs",
+          "markdownDescription": "Configure which projects to include in ALLP log viewer.\n\nExample:\n```json\n[\n  { \"name\": \"beads\", \"path\": \"C:\\\\myStuff\\\\_infra\\\\beads\" },\n  { \"name\": \"Judge0\", \"path\": \"C:\\\\myStuff\\\\_tooling\\\\Judge0\" }\n]\n```"
+        }
+      }
+    }
   },
   "scripts": {
     "vscode:prepublish": "npm run compile",
