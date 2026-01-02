@@ -225,6 +225,10 @@ export const BeadsAdapter: SourceAdapter = {
   type: 'beads',
 
   parse(rawLine: string): ActionableLogLine | null {
+    // Defensive: handle null/undefined input
+    if (!rawLine || typeof rawLine !== 'string') {
+      return null;
+    }
     // Beads format: TIMESTAMP|EVENT_CODE|ISSUE_ID|AGENT_ID|SESSION_ID|DETAILS
     const parts = rawLine.split('|');
     if (parts.length < 5) {

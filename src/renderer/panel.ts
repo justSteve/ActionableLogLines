@@ -386,6 +386,8 @@ export class AllpPanel {
     let lines = [];
     let selectedIndex = -1;
     let config = {};
+    let queryHistory = [];
+    let historyIndex = -1;
 
     // Handle messages from extension
     window.addEventListener('message', event => {
@@ -486,12 +488,32 @@ export class AllpPanel {
       const input = queryInput.value.trim();
       if (!input) return;
 
+      // Add to history (avoid duplicates at end)
+      if (queryHistory.length === 0 || queryHistory[queryHistory.length - 1] !== input) {
+        queryHistory.push(input);
+        // Keep history to last 50 items
+        if (queryHistory.length > 50) queryHistory.shift();
+      }
+      historyIndex = queryHistory.length;
+
       vscode.postMessage({
         type: 'query',
         payload: { input }
       });
 
       queryInput.value = '';
+    }
+
+    function navigateHistory(direction) {
+      if (queryHistory.length === 0) return;
+
+      if (direction === 'up') {
+        historyIndex = Math.max(0, historyIndex - 1);
+      } else {
+        historyIndex = Math.min(queryHistory.length, historyIndex + 1);
+      }
+
+      queryInput.value = historyIndex < queryHistory.length ? queryHistory[historyIndex] : '';
     }
 
     function insertSuggestion(cmd) {
@@ -502,6 +524,8 @@ export class AllpPanel {
     function clearLog() {
       lines = [];
       selectedIndex = -1;
+      queryHistory = [];
+      historyIndex = -1;
       logPanel.innerHTML = '';
       responseContent.innerHTML = '<span class="empty">Click a log line to see details...</span>';
       suggestions.innerHTML = '';
@@ -537,8 +561,16 @@ export class AllpPanel {
 
     // Event listeners
     querySubmit.addEventListener('click', submitQuery);
-    queryInput.addEventListener('keypress', e => {
-      if (e.key === 'Enter') submitQuery();
+    queryInput.addEventListener('keydown', e => {
+      if (e.key === 'Enter') {
+        submitQuery();
+      } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        navigateHistory('up');
+      } else if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        navigateHistory('down');
+      }
     });
 
     // Signal ready
