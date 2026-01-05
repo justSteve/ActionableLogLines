@@ -4,6 +4,7 @@ dist/
 *.d.ts
 *.js.map
 !src/**/*.js
+!bin/**/*.js
 .vscode/
 *.log
 .claude/

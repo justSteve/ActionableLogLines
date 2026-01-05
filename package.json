@@ -84,13 +84,14 @@
     }
   },
   "scripts": {
-    "vscode:prepublish": "npm run compile",
+    "vscode:prepublish": "bun run compile",
     "compile": "tsc -p ./",
     "watch": "tsc -watch -p ./",
-    "pretest": "npm run compile",
-    "test": "node --test dist/test/**/*.test.js",
+    "pretest": "bun run compile",
+    "test": "bun test",
     "test:session": "pwsh ./scripts/test-session.ps1",
-    "test:session:bash": "bash ./scripts/test-session.sh"
+    "test:session:bash": "bash ./scripts/test-session.sh",
+    "cli": "bun run bin/allp-generate.js"
   },
   "dependencies": {
     "handlebars": "^4.7.8",
@@ -99,6 +100,7 @@
     "uuid": "^9.0.0"
   },
   "devDependencies": {
+    "@types/bun": "latest",
     "@types/node": "^20.0.0",
     "@types/prompts": "^2.4.4",
     "@types/uuid": "^9.0.0",
